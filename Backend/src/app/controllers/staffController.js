@@ -24,7 +24,6 @@ const StaffController ={
                 phoneStaff: req.body.phoneStaff,
                 passwordStaff: hashed,
                 addressStaff: req.body.addressStaff,
-                avatarStaff: req.body.avatarStaff,
                 emailStaff: req.body.emailStaff
               });
             // save new user
@@ -44,6 +43,10 @@ const StaffController ={
             console.log('cannot register staff', error);
         }
     }, 
+    // update avatar
+    upDateAvatar: async(req, res) => {
+      const {avatarStaff} = req.body;
+    },
     // generate access token
     generateAccessToken: (newStaff) =>{
       return jwt.sign({
@@ -51,7 +54,7 @@ const StaffController ={
         nameAuth: newStaff.authorities
       },
       config.jwt.secretkey,
-      {expiresIn: '10s'}
+      {expiresIn: '5d'}
       );
     },
     // generate refresh token 
@@ -68,24 +71,34 @@ const StaffController ={
     loginStaff:async (req, res) =>{
       try {
         const {email, password} = req.body;
-        const staff = await authService.findOneStaff(email);
-        if(!staff || !(await bcrypt.compare(password, staff.passwordStaff))){
-            return res.status(404).json({message:'email or password is incorrect'})
-        } else{
-            const authorities = await authService.getAuthorities(staff.id)
-            const newStaff = {
-              ...staff,
-              authorities: authorities.nameAuth
-            }
-             // access token
-            const accessToken = StaffController.generateAccessToken(newStaff)
-              //token reserved
-            const refreshToken = StaffController.generateRefreshToken(newStaff)
-              
-            refreshTokens.push(refreshToken)
-            const {passwordStaff, ...orthers} = staff._doc;
-            return res.status(200).json({message: 'login successful', ...orthers,accessToken,refreshToken});
+        if(email === '') {
+          return res.status(404).json({message: 'Vui lòng điền email của bạn '})
         }
+        if(password === '') {
+          return res.status(404).json({message: 'Vui lòng điền password của bạn '})
+          
+        }
+        const staff = await authService.findOneStaff(email);
+        if(!staff  ){
+            return res.status(404).json({message:'Email này chưa đăng ký tài khoản, vui lòng đăng ký '})
+        }
+        if(!(await bcrypt.compare(password, staff.passwordStaff))){
+          return res.status(404).json({message:'Password không đúng vui lòng nhập lại '})
+
+        }
+        const authorities = await authService.getAuthorities(staff.id)
+        const newStaff = {
+          ...staff,
+          authorities: authorities.nameAuth
+        }
+         // access token
+        const accessToken = StaffController.generateAccessToken(newStaff)
+          //token reserved
+        const refreshToken = StaffController.generateRefreshToken(newStaff)
+          
+        refreshTokens.push(refreshToken)
+        const {passwordStaff, ...orthers} = staff._doc;
+        return res.status(200).json({message: 'Chào bạn đến với Noon', ...orthers,accessToken,refreshToken});
       } catch (error) {
         console.log('cannot login staff', error);
       }
@@ -97,9 +110,10 @@ const StaffController ={
         // get refresh token from staff       
         const refresh = req.body.refreshToken;
         console.log("refresh",refresh);
-        console.log("kho", refreshTokens);
         if(!refresh)
           return res.status(401).json('you are not logged in')
+
+          console.log("rerefreshTokens",refreshTokens);
         if(!refreshTokens.includes(refresh)){
           return res.status(401).json('refresh token is not authorized')
         }
@@ -113,6 +127,7 @@ const StaffController ={
             const newAccessToken = StaffController.generateAccessToken(newStaff);
             const newRefreshToken = StaffController.generateRefreshToken(newStaff);
             refreshTokens.push(newRefreshToken)
+            console.log(refreshTokens);
             return res.status(200).json({accessToken: newAccessToken, refreshToken: newRefreshToken})
           } )
         }
@@ -123,17 +138,20 @@ const StaffController ={
     // log out staff
     logoutStaff: async(req, res) => {
       // refresh token clear
-      res.clearCookie('refreshToken');
-      refreshTokens = refreshTokens.filter((token)=> token !== req.cookies.refreshToken);
+      const refresh = req.body.refreshToken;
+      refreshTokens = [];
       return res.status(200).json('logged out')
     },
     
     // get all staff have authorities 'Nhan vien'
      getAllStaff:async (req,res)=> {
       try {
-        console.log('nhu');
         const staff = await authService.findAllStaff();
-        return res.status(200).json(staff);
+        const StaffNew = staff.map((item) => {
+          const { passwordStaff, ...rest } = item._doc;
+          return rest;
+        });
+        return res.status(200).json(StaffNew);
       } catch (error) {
         console.log('can not get all staff', error);
       }
@@ -146,7 +164,8 @@ const StaffController ={
       } catch (error) {
         console.log('can not delete staff', error);
       }
-    }
+    },
+    
 }  
 
 module.exports = StaffController;
